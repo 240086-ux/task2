@@ -38,6 +38,23 @@
   measurementId: "G-ETQ1NEBW9S"
 };
 
+    // Добавить после firebase.initializeApp
+const auth = firebase.auth();
+
+// Анонимный вход при загрузке страницы
+auth.signInAnonymously().catch(error => {
+    console.error("Ошибка входа:", error);
+});
+
+// Отслеживаем состояние входа
+auth.onAuthStateChanged((user) => {
+    if (user) {
+        console.log("Авторизован анонимно, UID:", user.uid);
+    } else {
+        console.log("Не авторизован");
+    }
+});
+
     // 2. Инициализация
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
