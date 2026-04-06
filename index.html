@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Firebase BaaS — реактивная лента</title>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+    <style>
+        body { font-family: Arial; max-width: 600px; margin: auto; padding: 20px; }
+        #posts div { border: 1px solid #ccc; margin: 10px 0; padding: 10px; border-radius: 8px; }
+        button { background: #1a73e8; color: white; border: none; padding: 6px 12px; cursor: pointer; }
+        .likes { font-weight: bold; margin-left: 10px; }
+        input, textarea { width: 100%; margin: 5px 0; padding: 8px; }
+    </style>
+</head>
+<body>
+
+<h2>📝 Живая лента (BaaS + onSnapshot)</h2>
+
+<div>
+    <input type="text" id="author" placeholder="Ваше имя" style="width: 30%;">
+    <textarea id="messageText" placeholder="Текст поста..." rows="2"></textarea>
+    <button id="sendBtn">➕ Отправить</button>
+</div>
+
+<hr>
+<div id="posts">⏳ Загрузка...</div>
+
+<script>
+    // 1. Конфигурация Firebase (ЗАМЕНИТЕ на свои данные из консоли Firebase)
+    const firebaseConfig = {
+        apiKey: "ВАШ_API_KEY",
+        authDomain: "ВАШ_ПРОЕКТ.firebaseapp.com",
+        projectId: "ВАШ_ПРОЕКТ",
+        storageBucket: "ВАШ_ПРОЕКТ.appspot.com",
+        messagingSenderId: "123456789",
+        appId: "ВАШ_APP_ID"
+    };
+
+    // 2. Инициализация
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    // 3. Реактивная загрузка с сортировкой orderBy("timestamp", "desc")
+    const postsDiv = document.getElementById("posts");
+
+    db.collection("posts")
+        .orderBy("timestamp", "desc")
+        .onSnapshot((snapshot) => {
+            // Очищаем DOM
+            postsDiv.innerHTML = "";
+
+            if (snapshot.empty) {
+                postsDiv.innerHTML = "<p>Нет постов. Напишите первый!</p>";
+                return;
+            }
+
+            snapshot.forEach((doc) => {
+                const data = doc.data();
+                const postId = doc.id;
+
+                // Создаём карточку поста
+                const postEl = document.createElement("div");
+                postEl.innerHTML = `
+                    <strong>${escapeHtml(data.author || "Аноним")}</strong>
+                    <p>${escapeHtml(data.text)}</p>
+                    <button class="likeBtn" data-id="${postId}">❤️ Лайк</button>
+                    <span class="likes" id="likes-${postId}">👍 ${data.likes || 0}</span>
+                    <small style="display:block; color:gray;">${new Date(data.timestamp?.toDate()).toLocaleString()}</small>
+                `;
+                postsDiv.appendChild(postEl);
+            });
+
+            // Вешаем обработчики на кнопки "Лайк"
+            document.querySelectorAll(".likeBtn").forEach(btn => {
+                btn.removeEventListener("click", likeHandler);
+                btn.addEventListener("click", likeHandler);
+            });
+        }, (error) => {
+            console.error("Ошибка onSnapshot:", error);
+            postsDiv.innerHTML = "<p style='color:red'>Ошибка загрузки. Проверьте правила доступа.</p>";
+        });
+
+    // 4. Обработчик лайка с атомарным increment
+    async function likeHandler(e) {
+        const postId = e.currentTarget.getAttribute("data-id");
+        try {
+            await db.collection("posts").doc(postId).update({
+                likes: firebase.firestore.FieldValue.increment(1)
+            });
+            console.log("Лайк +1 (атомарно)");
+        } catch (err) {
+            alert("Ошибка: " + err.message);
+        }
+    }
+
+    // 5. Отправка нового поста
+    document.getElementById("sendBtn").onclick = async () => {
+        const author = document.getElementById("author").value.trim() || "Аноним";
+        const text = document.getElementById("messageText").value.trim();
+
+        if (!text) {
+            alert("Введите текст поста");
+            return;
+        }
+
+        try {
+            await db.collection("posts").add({
+                author: author,
+                text: text,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                likes: 0
+            });
+            // Очищаем поле ввода
+            document.getElementById("messageText").value = "";
+        } catch (err) {
+            alert("Ошибка при отправке: " + err.message);
+        }
+    };
+
+    // Вспомогательная функция против XSS
+    function escapeHtml(str) {
+        if (!str) return "";
+        return str.replace(/[&<>]/g, function(m) {
+            if (m === "&") return "&amp;";
+            if (m === "<") return "&lt;";
+            if (m === ">") return "&gt;";
+            return m;
+        });
+    }
+</script>
+</body>
+</html>
